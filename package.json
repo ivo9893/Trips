@@ -10,7 +10,7 @@
     "seed": "npm --prefix server run seed",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install",
     "build": "npm --prefix client run build && npm --prefix server run build",
-    "render-build": "npm --prefix server install --include=dev && npm --prefix client install --include=dev && npm --prefix client run build && npm --prefix server run build",
+    "render-build": "NODE_ENV=development npm --prefix server install && NODE_ENV=development npm --prefix client install && npm --prefix client run build && npm --prefix server run build",
     "start": "npm --prefix server start"
   },
   "devDependencies": {
