@@ -106,17 +106,22 @@ export function activityLogger(req: Request, res: Response, next: NextFunction) 
   // Skip non-mutations and the log endpoint itself (it records its own events).
   if (!mutating || !req.path.startsWith('/api') || req.path.startsWith('/api/log')) return next();
 
-  const body = req.body; // capture before handler runs
+  // Capture now: Express strips the mount prefix from req.path/req.method during
+  // routing, so by the time the 'finish' event fires they no longer hold the full
+  // path. Snapshot the values we need before handing off to the routers.
+  const method = req.method;
+  const path = req.path;
+  const body = req.body;
   const actor = decodeActor(req.header('X-Actor') || undefined);
 
   res.on('finish', async () => {
     if (res.statusCode >= 400) return;
     try {
-      const d = await describe(req.method, req.path, body);
+      const d = await describe(method, path, body);
       if (!d) return;
       await db`
-        INSERT INTO activity_log (actor, method, path, action, trip_id) 
-        VALUES (${actor}, ${req.method}, ${req.path}, ${d.action}, ${d.trip_id ?? null})
+        INSERT INTO activity_log (actor, method, path, action, trip_id)
+        VALUES (${actor}, ${method}, ${path}, ${d.action}, ${d.trip_id ?? null})
       `;
     } catch (e) {
       console.error('activity log error:', e);
