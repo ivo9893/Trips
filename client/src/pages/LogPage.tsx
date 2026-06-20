@@ -88,7 +88,11 @@ export default function LogPage() {
 }
 
 function parse(iso: string) {
-  return new Date(iso.replace(' ', 'T') + 'Z'); // server stores UTC
+  // Postgres returns full ISO (…Z / with offset); the old SQLite format was
+  // 'YYYY-MM-DD HH:MM:SS' (UTC, no zone). Normalise both.
+  let s = iso.includes('T') ? iso : iso.replace(' ', 'T');
+  if (!/[Zz]|[+-]\d\d:?\d\d$/.test(s)) s += 'Z';
+  return new Date(s);
 }
 function dayLabel(iso: string) {
   const d = parse(iso);
