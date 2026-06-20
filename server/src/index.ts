@@ -49,6 +49,6 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 // Use a dedicated var so we don't collide with PORT injected by dev tooling/Vite.
-const PORT = Number(process.env.API_PORT) || 3001;
+const PORT = Number(process.env.PORT) || Number(process.env.API_PORT) || 3001;
 app.listen(PORT, () => console.log(`🏕️  Палатки API on http://localhost:${PORT}`));
 
