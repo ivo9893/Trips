@@ -12,15 +12,19 @@ const LIST_LABEL: Record<string, string> = {
   'gear-items': 'Необходимо',
 };
 
-const personName = (id: any): string | null => {
+const personName = async (id: any): Promise<string | null> => {
   if (!id) return null;
-  const r = db.prepare('SELECT name FROM people WHERE id = ?').get(id) as { name: string } | undefined;
+  const [r] = await db`SELECT name FROM people WHERE id = ${id}`;
   return r?.name ?? null;
 };
-const participantName = (id: any): string | null => {
-  const r = db
-    .prepare('SELECT pe.name FROM trip_participants tp JOIN people pe ON pe.id = tp.person_id WHERE tp.id = ?')
-    .get(id) as { name: string } | undefined;
+
+const participantName = async (id: any): Promise<string | null> => {
+  if (!id) return null;
+  const [r] = await db`
+    SELECT pe.name 
+    FROM trip_participants tp JOIN people pe ON pe.id = tp.person_id 
+    WHERE tp.id = ${id}
+  `;
   return r?.name ?? null;
 };
 
@@ -39,7 +43,7 @@ function changedAspects(body: any): string {
 type Desc = { action: string; trip_id?: number | null } | null;
 
 /** Build a friendly Bulgarian description for a mutating request. */
-export function describe(method: string, path: string, body: any): Desc {
+export async function describe(method: string, path: string, body: any): Promise<Desc> {
   let m;
   if (method === 'POST' && path === '/api/trips') return { action: `Създаде пътуване „${body?.name ?? ''}“` };
 
@@ -47,11 +51,16 @@ export function describe(method: string, path: string, body: any): Desc {
     if (method === 'PATCH') return { action: 'Промени детайли на пътуването', trip_id: +m[1] };
     if (method === 'DELETE') return { action: 'Изтри пътуване', trip_id: +m[1] };
   }
-  if ((m = path.match(/^\/api\/trips\/(\d+)\/participants$/)) && method === 'POST')
-    return { action: `Добави в състава: ${body?.name ?? personName(body?.person_id) ?? 'човек'}`, trip_id: +m[1] };
+  if ((m = path.match(/^\/api\/trips\/(\d+)\/participants$/)) && method === 'POST') {
+    const pName = body?.name ?? (await personName(body?.person_id)) ?? 'човек';
+    return { action: `Добави в състава: ${pName}`, trip_id: +m[1] };
+  }
 
   if ((m = path.match(/^\/api\/participants\/(\d+)$/))) {
-    if (method === 'PUT') return { action: `Обнови ${participantName(m[1]) ?? 'участник'}${changedAspects(body)}` };
+    if (method === 'PUT') {
+      const pName = (await participantName(m[1])) ?? 'участник';
+      return { action: `Обнови ${pName}${changedAspects(body)}` };
+    }
     if (method === 'DELETE') return { action: 'Премахна участник от състава' };
   }
 
@@ -72,8 +81,10 @@ export function describe(method: string, path: string, body: any): Desc {
     if (method === 'DELETE') return { action: `Изтри запис от „${LIST_LABEL[m[1]] ?? m[1]}“` };
   }
 
-  if ((m = path.match(/^\/api\/trips\/(\d+)\/wheel\/pick$/)) && method === 'POST')
-    return { action: `🎡 Колело: ${personName(body?.person_id) ?? 'някой'} отива на пазар`, trip_id: +m[1] };
+  if ((m = path.match(/^\/api\/trips\/(\d+)\/wheel\/pick$/)) && method === 'POST') {
+    const pName = (await personName(body?.person_id)) ?? 'някой';
+    return { action: `🎡 Колело: ${pName} отива на пазар`, trip_id: +m[1] };
+  }
   if (path.match(/^\/api\/wheel\/duty\/(\d+)$/) && method === 'DELETE')
     return { action: 'Отмени дежурство от колелото' };
 
@@ -89,10 +100,6 @@ function decodeActor(raw: string | undefined): string | null {
   }
 }
 
-const insert = db.prepare(
-  'INSERT INTO activity_log (actor, method, path, action, trip_id) VALUES (?, ?, ?, ?, ?)',
-);
-
 /** Express middleware: logs every successful mutating request. */
 export function activityLogger(req: Request, res: Response, next: NextFunction) {
   const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
@@ -102,12 +109,15 @@ export function activityLogger(req: Request, res: Response, next: NextFunction) 
   const body = req.body; // capture before handler runs
   const actor = decodeActor(req.header('X-Actor') || undefined);
 
-  res.on('finish', () => {
+  res.on('finish', async () => {
     if (res.statusCode >= 400) return;
     try {
-      const d = describe(req.method, req.path, body);
+      const d = await describe(req.method, req.path, body);
       if (!d) return;
-      insert.run(actor, req.method, req.path, d.action, d.trip_id ?? null);
+      await db`
+        INSERT INTO activity_log (actor, method, path, action, trip_id) 
+        VALUES (${actor}, ${req.method}, ${req.path}, ${d.action}, ${d.trip_id ?? null})
+      `;
     } catch (e) {
       console.error('activity log error:', e);
     }

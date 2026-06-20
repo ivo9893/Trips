@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import './db.js';
+import { initSchema } from './db.js';
 import listsRouter from './routes/lists.js';
 import tripsRouter from './routes/trips.js';
 import participantsRouter from './routes/participants.js';
@@ -50,5 +50,12 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 // Use a dedicated var so we don't collide with PORT injected by dev tooling/Vite.
 const PORT = Number(process.env.PORT) || Number(process.env.API_PORT) || 3001;
-app.listen(PORT, () => console.log(`🏕️  Палатки API on http://localhost:${PORT}`));
+
+initSchema().then(() => {
+  app.listen(PORT, () => console.log(`🏕️  Палатки API on http://localhost:${PORT}`));
+}).catch((err) => {
+  console.error('Failed to start server due to schema initialization error:', err);
+  process.exit(1);
+});
+
 
