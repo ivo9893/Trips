@@ -54,7 +54,12 @@ export default function Layout() {
               <div className="font-semibold text-sm truncate">{me ? me.name : 'Гост 👀'}</div>
             </div>
             <button
-              onClick={() => setMeId(null)}
+              onClick={() => {
+                // Reset showAll too, otherwise a guest (meId already null) keeps
+                // showAll=true and the identity gate never reappears.
+                setMeId(null);
+                setShowAll(false);
+              }}
               className="text-[11px] text-pine-300 hover:text-sand-300 underline underline-offset-2"
             >
               смени
